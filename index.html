@@ -1,0 +1,1084 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Editor</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.9.0/lib/umd/jsonrepair.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ajv/8.17.1/ajv7.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsonpath-plus@10.2.0/dist/index-browser-umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jmespath@0.16.0/jmespath.min.js"></script>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vanilla-jsoneditor@3.13.0/themes/jse-theme-dark.css">
+
+  <style>
+    /* ---------- theme tokens ---------- */
+    :root {
+      --bg-base: #1e1e2e;
+      --bg-mantle: #181825;
+      --bg-crust: #11111b;
+      --bg-surface: #313244;
+      --bg-surface-hover: #45475a;
+      --bg-header-from: #1e1e2e;
+      --bg-header-to: #181825;
+      --text-primary: #cdd6f4;
+      --text-secondary: #a6adc8;
+      --text-muted: #6c7086;
+      --accent: #89b4fa;
+      --accent-hover: #74c7ec;
+      --accent-secondary: #cba6f7;
+      --accent-on: #1e1e2e;
+      --border: #313244;
+      --border-strong: #45475a;
+      --warning: #f9e2af;
+      --error: #f38ba8;
+      --success: #a6e3a1;
+      --shadow: rgba(0,0,0,0.45);
+      --logo-glow: rgba(137,180,250,0.35);
+      
+    }
+
+    body.light {
+      --bg-base: #eff1f5;
+      --bg-mantle: #e6e9ef;
+      --bg-crust: #dce0e8;
+      --bg-surface: #ccd0da;
+      --bg-surface-hover: #bcc0cc;
+      --bg-header-from: #ffffff;
+      --bg-header-to: #eff1f5;
+      --text-primary: #4c4f69;
+      --text-secondary: #5c5f77;
+      --text-muted: #8c8fa1;
+      --accent: #1e66f5;
+      --accent-hover: #0451d1;
+      --accent-secondary: #8839ef;
+      --accent-on: #ffffff;
+      --border: #ccd0da;
+      --border-strong: #bcc0cc;
+      --warning: #df8e1d;
+      --error: #d20f39;
+      --success: #40a02b;
+      --shadow: rgba(0,0,0,0.15);
+      --logo-glow: rgba(30,102,245,0.25);
+    }
+    :root {
+  /* … unchanged … */
+  --logo-glow: rgba(220, 240, 200, 0.75);
+}
+
+body.light {
+  /* … unchanged … */
+  --logo-glow: rgba(220, 240, 200, 0.75);
+}
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    /* ---------- HEADER ---------- */
+    #app-header {
+      position: relative;
+      display: flex; align-items: center; gap: 12px;
+      padding: 2px 6px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--bg-header-from), var(--bg-header-to));
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #app-header::before {
+      content: "";
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-secondary));
+    }
+    #app-header::after {
+      content: "";
+      position: absolute; left: 0; top: 0; width: 240px; height: 100%;
+      background: radial-gradient(circle at 23px 23px, var(--logo-glow) 0%, transparent 65%);
+      pointer-events: none;
+    }
+
+    .logo-wrap {
+      display: flex; align-items: center; gap: 10px;
+      position: relative; z-index: 1;
+    }
+    .logo-icon {
+      width: 34px; height: 34px; flex-shrink: 0;
+      filter: drop-shadow(0 2px 8px var(--logo-glow));
+    }
+    .logo-grad-from { stop-color: var(--accent); }
+    .logo-grad-to   { stop-color: var(--accent-secondary); }
+    .logo-brace     { stroke: var(--accent-on); }
+
+    .app-title {
+      display: flex; align-items: baseline; gap: 8px;
+      font-size: 17px; font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.01em;
+    }
+    .app-title .version {
+      font-size: 11px; font-weight: 500;
+      color: var(--text-muted);
+      padding: 1px 6px; border-radius: 4px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-strong);
+    }
+
+    .header-spacer { flex: 1; }
+
+    .icon-button {
+      width: 36px; height: 36px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid var(--border-strong);
+      color: var(--text-secondary);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative; z-index: 1;
+    }
+    .icon-button:hover {
+      background: var(--bg-surface);
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-1px);
+    }
+    .icon-button:active { transform: translateY(0); }
+
+    .icon-button .icon-sun { display: none; }
+    body.light .icon-button .icon-sun  { display: block; }
+    body.light .icon-button .icon-moon { display: none; }
+
+    /* ---------- TOOLBAR ---------- */
+    
+    #toolbar {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 8px 6px;
+  background: var(--bg-mantle);
+  border-bottom: 1px solid var(--border);
+  align-items: center; flex-shrink: 0;
+  overflow-x: hidden;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+    #toolbar button {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 13px;
+      cursor: pointer; transition: background .15s, color .15s, border-color .15s;
+      flex-shrink: 0;
+    }
+    #toolbar button:hover { background: var(--bg-surface-hover); }
+    #toolbar .separator {
+      width:1px;
+      height:24px;
+      background: var(--border-strong);
+      margin:0 4px;
+      flex-shrink: 0;
+    }
+
+    /* ---------- MAIN ---------- */
+    #main { display:flex; flex:1; overflow:hidden; position:relative; }
+    .panel { flex:1; display:flex; flex-direction:column; min-width:0; overflow:hidden; }
+
+    .panel-menu {
+      display:flex; align-items:center; gap:4px;
+      padding:4px 8px; background: var(--bg-mantle);
+      border-bottom:1px solid var(--border);
+      font-size:12px; min-height:36px; flex-shrink:0;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .panel-menu .document-details {
+      display:flex; align-items:center; gap:4px;
+      color: var(--text-secondary); font-size:12px;
+    }
+    .panel-menu .doc-title { font-weight:500; color: var(--text-primary); }
+    .panel-menu .doc-title.dirty::after {
+      content:" ●"; color: var(--warning); font-size:10px; vertical-align:middle;
+    }
+    .panel-menu .menu-button {
+      background:transparent; border:none; color: var(--text-primary);
+      padding:4px 6px; cursor:pointer; border-radius:3px;
+      display:inline-flex; align-items:center; gap:3px;
+      font-size:12px;
+    }
+    .panel-menu .menu-button:hover { background: var(--bg-surface); }
+    .panel-menu .space { flex:1; }
+    .panel-menu .buttons { display:flex; gap:2px; }
+
+    .dropdown-button { position:relative; }
+    .dropdown-menu {
+      display:none; position:absolute; top:100%; right:0;
+      background: var(--bg-base); border:1px solid var(--border-strong); border-radius:4px;
+      min-width:190px; z-index:200; padding:4px 0;
+      box-shadow:0 6px 20px var(--shadow);
+    }
+    .dropdown-button.open .dropdown-menu { display:block; }
+    .dropdown-menu button {
+      display:block; width:100%; text-align:left;
+      padding:6px 12px; background:none; border:none;
+      color: var(--text-primary); cursor:pointer; font-size:12px;
+    }
+    .dropdown-menu button:hover { background: var(--bg-surface); }
+    .dropdown-menu-separator { height:1px; background: var(--border-strong); margin:4px 0; }
+
+    .editor-container { flex:1; overflow:hidden; position:relative; }
+    .editor-container > div { height:100%; }
+
+    /* ---------- STATUS BAR ---------- */
+    #statusbar {
+      display:flex; gap:16px; padding:4px 12px;
+      background: var(--bg-mantle); border-top:1px solid var(--border);
+      font-size:12px; color: var(--text-secondary); flex-shrink:0;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    /* ---------- MODALS ---------- */
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,.55); z-index:1000;
+      align-items:center; justify-content:center;
+    }
+    .modal-overlay.active { display:flex; }
+    .modal {
+      background: var(--bg-base); border:1px solid var(--border-strong); border-radius:8px;
+      padding:20px; min-width:480px; max-width:90vw; max-height:80vh;
+      overflow:auto; color: var(--text-primary);
+      box-shadow:0 10px 40px var(--shadow);
+    }
+    .modal h3 { margin-bottom:12px; color: var(--accent); }
+    .modal textarea, .modal input[type="text"] {
+      width:100%; background: var(--bg-crust); color: var(--text-primary);
+      border:1px solid var(--border-strong); border-radius:4px; padding:8px;
+      font-family:monospace; font-size:13px; margin-bottom:10px;
+    }
+    .modal textarea { min-height:120px; resize:vertical; }
+    .modal .actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+    .modal .actions button {
+      background: var(--bg-surface); color: var(--text-primary);
+      border:1px solid var(--border-strong); border-radius:4px; padding:6px 14px; cursor:pointer;
+    }
+    .modal .actions button.primary {
+      background: var(--accent); color: var(--accent-on);
+      border-color: var(--accent); font-weight:600;
+    }
+    .modal .actions button:hover { background: var(--bg-surface-hover); }
+    .modal .actions button.primary:hover { background: var(--accent-hover); }
+    .modal .result-area {
+      background: var(--bg-crust); border:1px solid var(--border-strong); border-radius:4px;
+      padding:8px; font-family:monospace; font-size:12px;
+      max-height:200px; overflow:auto; white-space:pre-wrap; margin-top:8px;
+    }
+    #transform-lang {
+      background: var(--bg-surface); color: var(--text-primary);
+      border:1px solid var(--border-strong); border-radius:4px; padding:4px 8px;
+    }
+  </style>
+<style>
+/* jse-menu (built-in editor menu) — lighter green */
+:root{
+  --jse-theme-color: #91b770;              /* rgb(145, 183, 112) */
+  --jse-theme-color-highlight: #a3c583;    /* hover state */
+}
+
+/* panel-menu (our custom toolbar above the editor) — darker green */
+.panel-menu {
+  background: #7b9a62;                     /* rgb(123, 154, 98) */
+  border-bottom-color: #6a8755;
+  color: #f4f7f0;
+}
+.panel-menu .doc-title { color: #f4f7f0; }
+.panel-menu .menu-button { color: #f4f7f0; }
+.panel-menu .menu-button:hover { background: rgba(0, 0, 0, 0.15); }
+.panel-menu .document-details { color: #e3ecdd; }
+/* Keep the jse-menu on a single row */
+.jse-menu {
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+/* Prevent individual buttons from shrinking and causing a wrap */
+.jse-menu .jse-button {
+  flex-shrink: 0;
+}
+
+/* Keep the "spacer" pushing the right-side items to the edge */
+.jse-menu .jse-space {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Optional: hide the horizontal scrollbar visually but keep it functional */
+.jse-menu::-webkit-scrollbar { height: 4px; }
+.jse-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; }
+</style>
+<style>
+/* ---- Header + toolbar greens ---- */
+
+/* App header: darker green fading into the toolbar's green */
+#app-header {
+  background: linear-gradient(180deg, #6a8755, #7b9a62);
+  border-bottom-color: #6a8755;
+}
+
+/* Toolbar: same #7b9a62 as the panel-menu below it */
+#toolbar {
+  background: #7b9a62;
+  border-bottom-color: #6a8755;
+}
+
+/* Toolbar buttons: white-on-translucent, matching .panel-menu .menu-button */
+#toolbar button {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(0, 0, 0, 0.20);
+  color: #f4f7f0;
+}
+#toolbar button:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/* Separator visible on green */
+#toolbar .separator {
+  background: rgba(255, 255, 255, 0.30);
+}
+
+/* Header text + version badge + icon-button: white-on-green */
+#app-header .app-title { color: #f4f7f0; }
+#app-header .app-title .version {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #f4f7f0;
+}
+#app-header .icon-button {
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #f4f7f0;
+}
+#app-header .icon-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+}
+
+#editor-main {
+  --jse-theme-color: #91b770;
+  --jse-theme-color-highlight: #a3c583;
+}
+.cm-gutter.cm-gutter-lint{
+display: none!important;
+}
+</style>
+
+<style>
+:root {
+  --jse-table-border-color: #45475a; /* dark theme border */
+}
+body.light {
+  --jse-table-border-color: #bcc0cc; /* light theme border */
+}
+
+.jse-table-main td.jse-table-cell {
+  border: 1px solid var(--jse-table-border-color);
+}
+.jse-table-main tr.jse-table-row > th.jse-table-cell:first-child {
+  display: none;
+}
+body.focus-mode #app-header,
+body.focus-mode #toolbar,
+body.focus-mode #statusbar {
+  display: none !important;
+}
+.modal{
+min-width: 100vw!important;
+max-width: 100vw!important;
+}
+</style>
+</head>
+<body>
+
+<!-- ============ HEADER ============ -->
+<header id="app-header">
+  <div class="logo-wrap">
+    <svg class="logo-icon" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="logoGrad" x1="0" y1="0" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+          <stop class="logo-grad-from" offset="0"/>
+          <stop class="logo-grad-to"   offset="1"/>
+        </linearGradient>
+      </defs>
+      <rect width="34" height="34" rx="9" fill="url(#logoGrad)"/>
+      <path class="logo-brace" d="M13 9.5 C11 9.5 10 10.6 10 12.6 L10 14.8 C10 16 9 16.9 8 17 C9 17.1 10 18 10 19.2 L10 21.4 C10 23.4 11 24.5 13 24.5" stroke-width="2.2" stroke-linecap="round"/>
+      <path class="logo-brace" d="M21 9.5 C23 9.5 24 10.6 24 12.6 L24 14.8 C24 16 25 16.9 26 17 C25 17.1 24 18 24 19.2 L24 21.4 C24 23.4 23 24.5 21 24.5" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <span class="app-title">
+      JSON Editor
+      <span class="version">v1.0</span>
+    </span>
+  </div>
+  <div class="header-spacer"></div>
+  <button id="theme-toggle" class="icon-button" title="Toggle theme" aria-label="Toggle theme">
+    <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+    <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+    </svg>
+  </button>
+</header>
+
+<!-- ============ TOOLBAR ============ -->
+<div id="toolbar">
+  <button id="btn-repair">Repair</button>
+  <button id="btn-validate">Validate</button>
+  <button id="btn-transform">Transform</button>
+  <div class="separator"></div>
+  <button id="btn-share">Share</button>
+  <button id="btn-clear">Clear</button>
+</div>
+
+<!-- ============ MAIN ============ -->
+<div id="main">
+  <div class="panel" id="panel-main">
+    <div class="panel-menu" id="panel-menu"></div>
+    <div class="editor-container" id="editor-main"></div>
+  </div>
+</div>
+
+<!-- ============ STATUS BAR ============ -->
+<div id="statusbar">
+  <span id="status-doc">Ready</span>
+  <span style="flex:1"></span>
+  <span id="status-info"></span>
+</div>
+
+<!-- ============ MODALS ============ -->
+<div class="modal-overlay" id="modal-validate">
+  <div class="modal">
+    <h3>Validate against JSON Schema</h3>
+    <textarea id="schema-input" placeholder="Paste your JSON Schema here..."></textarea>
+    <div class="result-area" id="validation-result">No validation run yet.</div>
+    <div class="actions">
+      <button id="btn-validate-run" class="primary">Validate</button>
+      <button id="btn-validate-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-transform">
+  <div class="modal">
+    <h3>Transform / Query JSON</h3>
+    <div style="margin-bottom:8px;">
+      <label style="font-size:13px;margin-right:8px;">Language:</label>
+      <select id="transform-lang">
+        <option value="jsonpath">JSONPath-Plus</option>
+        <option value="jmespath">JMESPath</option>
+        <option value="javascript">JavaScript</option>
+      </select>
+    </div>
+    <textarea id="transform-query" placeholder="Enter query...">$..*</textarea>
+    <div style="display:flex;gap:8px;">
+      <button id="btn-transform-run" class="primary" style="background:var(--accent);color:var(--accent-on);border:1px solid var(--accent);border-radius:4px;padding:6px 14px;cursor:pointer;font-weight:600;">Run</button>
+      <button id="btn-transform-apply" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border-strong);border-radius:4px;padding:6px 14px;cursor:pointer;">Replace Document</button>
+    </div>
+    <div class="result-area" id="transform-result">Result will appear here.</div>
+    <div class="actions">
+      <button id="btn-transform-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-share">
+  <div class="modal">
+    <h3>Shareable Link</h3>
+    <input type="text" id="share-url" readonly>
+    <div class="actions">
+      <button id="btn-share-copy" class="primary">Copy</button>
+      <button id="btn-share-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-dialog">
+  <div class="modal" style="min-width: 380px; max-width: 480px;">
+    <h3 id="dialog-title">Confirm</h3>
+    <p id="dialog-message" style="margin-bottom: 12px; line-height: 1.5;"></p>
+    <input type="text" id="dialog-input" style="display: none;">
+    <div class="actions">
+      <button id="dialog-cancel">Cancel</button>
+      <button id="dialog-ok" class="primary">OK</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createJSONEditor } from 'https://cdn.jsdelivr.net/npm/vanilla-jsoneditor@3.13.0/standalone.js';
+
+  /* ---------- icons ---------- */
+  const svg = (v, p) => `<svg viewBox="0 0 ${v}" width="14" height="14"><path fill="currentColor" d="${p}"/></svg>`;
+  const I = {
+    file:   svg('384 512','M64 0C28.7 0 0 28.7 0 64v384c0 35.3 28.7 64 64 64h256c35.3 0 64-28.7 64-64V170.5c0-17-6.7-33.3-18.7-45.3L258.7 18.7C246.7 6.7 230.5 0 213.5 0H64z'),
+    folder: svg('576 512','M56 225.6L32.4 296.2V96c0-35.3 28.7-64 64-64h138.7c13.8 0 27.3 4.5 38.4 12.8l38.4 28.8c5.5 4.2 12.3 6.4 19.2 6.4h117.3c35.3 0 64 28.7 64 64v16H147c-41.3 0-78 26.4-91.1 65.6zM477.8 448H99c-32.8 0-55.9-32.1-45.5-63.2l48-144C108 221.2 126.4 208 147 208h378.8c32.8 0 55.9 32.1 45.5 63.2l-48 144c-6.5 19.6-24.9 32.8-45.5 32.8z'),
+    save:   svg('448 512','M64 32C28.7 32 0 60.7 0 96v320c0 35.3 28.7 64 64 64h320c35.3 0 64-28.7 64-64V173.3c0-17-6.7-33.3-18.7-45.3L352 50.7C340 38.7 323.7 32 306.7 32H64z'),
+    copy:   svg('448 512','M192 0c-35.3 0-64 28.7-64 64v256c0 35.3 28.7 64 64 64h192c35.3 0 64-28.7 64-64V119.4c0-17.4-7.1-34.1-19.7-46.2L370.6 17.8C358.7 6.4 342.8 0 326.3 0H192zM64 128c-35.3 0-64 28.7-64 64v256c0 35.3 28.7 64 64 64h192c35.3 0 64-28.7 64-64v-16h-64v16H64V128h16V64H64z'),
+    caret:  `<svg viewBox="0 0 320 512" width="9" height="9"><path fill="currentColor" d="M140.3 376.8c12.6 10.2 31.1 9.5 42.8-2.2l128-128c9.2-9.2 11.9-22.9 6.9-34.9S301.4 192 288.5 192h-256c-12.9 0-24.6 7.8-29.6 19.8S.7 237.5 9.9 246.6l128 128 2.4 2.2z"/></svg>`,
+    full:   svg('512 512','M344 0h144c13.3 0 24 10.7 24 24v144c0 9.7-5.8 18.5-14.8 22.2s-19.3 1.7-26.2-5.2l-39-39-87 87c-9.4 9.4-24.6 9.4-33.9 0l-32-32c-9.4-9.4-9.4-24.6 0-33.9l87-87-39-39c-6.9-6.9-8.9-17.2-5.2-26.2S334.3 0 344 0zM168 512H24c-13.3 0-24-10.7-24-24V344c0-9.7 5.8-18.5 14.8-22.2S34.1 320.2 41 327l39 39 87-87c9.4-9.4 24.6-9.4 33.9 0l32 32c9.4 9.4 9.4 24.6 0 33.9l-87 87 39 39c6.9 6.9 8.9 17.2 5.2 26.2S177.7 512 168 512z'),
+  };
+  
+  /* ---------- state ---------- */
+  let editor = null;
+  const doc = { name: 'document.json', dirty: false, savedSnapshot: '' };
+  let currentTheme = 'dark';
+
+  /* ---------- theme ---------- */
+  function applyTheme(theme) {
+    currentTheme = theme;
+
+    // Page chrome
+    document.body.classList.toggle('light', theme === 'light');
+
+    // Editor theme — the class must be on the editor's host element
+    const container = document.getElementById('editor-main');
+    if (container) {
+      container.classList.toggle('jse-theme-dark', theme === 'dark');
+    }
+
+    try { localStorage.setItem('json-editor-theme', theme); } catch {}
+  }
+  
+
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
+  });
+  
+  const dialogEl = {
+  overlay:   document.getElementById('modal-dialog'),
+  title:     document.getElementById('dialog-title'),
+  message:   document.getElementById('dialog-message'),
+  input:     document.getElementById('dialog-input'),
+  okBtn:     document.getElementById('dialog-ok'),
+  cancelBtn: document.getElementById('dialog-cancel'),
+};
+
+function uiDialog({ title, message, type = 'alert', defaultValue = '' }) {
+  return new Promise(resolve => {
+    dialogEl.title.textContent = title;
+    dialogEl.message.textContent = message;
+    dialogEl.cancelBtn.style.display = type === 'alert' ? 'none' : 'inline-block';
+    dialogEl.input.style.display   = type === 'prompt' ? 'block' : 'none';
+    if (type === 'prompt') dialogEl.input.value = defaultValue;
+
+    dialogEl.overlay.classList.add('active');
+    setTimeout(() => {
+      if (type === 'prompt') { dialogEl.input.focus(); dialogEl.input.select(); }
+      else dialogEl.okBtn.focus();
+    }, 0);
+
+    const cleanup = (result) => {
+      dialogEl.overlay.classList.remove('active');
+      dialogEl.okBtn.removeEventListener('click', onOk);
+      dialogEl.cancelBtn.removeEventListener('click', onCancel);
+      dialogEl.input.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onOk     = () => cleanup(type === 'prompt' ? dialogEl.input.value : true);
+    const onCancel = () => cleanup(type === 'prompt' ? null : false);
+    const onKey    = (e) => {
+      if (e.key === 'Enter')  onOk();
+      if (e.key === 'Escape') onCancel();
+    };
+
+    dialogEl.okBtn.addEventListener('click', onOk);
+    dialogEl.cancelBtn.addEventListener('click', onCancel);
+    dialogEl.input.addEventListener('keydown', onKey);
+  });
+}
+
+const uiAlert   = (message, title = 'Notice')  => uiDialog({ title, message, type: 'alert' });
+const uiConfirm = (message, title = 'Confirm') => uiDialog({ title, message, type: 'confirm' });
+const uiPrompt  = (message, defaultValue = '', title = 'Input') =>
+  uiDialog({ title, message, type: 'prompt', defaultValue });
+
+  /* ---------- helpers ---------- */
+  function getJSON() {
+    try {
+      const c = editor.get();
+      if (c.text !== undefined) return c.text.trim() === '' ? null : JSON.parse(c.text);
+      return c.json ?? null;
+    } catch { return null; }
+  }
+  function getRaw() {
+    const c = editor.get();
+    return c.text !== undefined ? c.text : JSON.stringify(c.json, null, 2);
+  }
+  function snapshot() { return JSON.stringify(getJSON()) || ''; }
+
+  function markSaved() {
+    doc.savedSnapshot = snapshot();
+    doc.dirty = false;
+    refreshTitle();
+    updateStatus();
+  }
+  function checkDirty() {
+    const dirty = snapshot() !== doc.savedSnapshot;
+    if (dirty !== doc.dirty) { doc.dirty = dirty; refreshTitle(); }
+  }
+  function refreshTitle() {
+    const el = document.getElementById('doc-title');
+    if (!el) return;
+    el.textContent = doc.name;
+    el.classList.toggle('dirty', doc.dirty);
+  }
+  function updateStatus() {
+    const j = getJSON();
+    document.getElementById('status-doc').textContent =
+      j ? `Valid JSON (${JSON.stringify(j).length} bytes)` : 'Invalid JSON';
+    document.getElementById('status-info').textContent =
+      doc.dirty ? 'Unsaved changes' : 'Saved';
+  }
+
+  /* ---------- smart format ---------- */
+  function smartFormat(json, maxInline = 60) {
+    const indent = 2;
+    function fmt(v, depth) {
+      if (v === null) return 'null';
+      if (typeof v !== 'object') return JSON.stringify(v);
+      const pad   = ' '.repeat(indent * depth);
+      const inner = ' '.repeat(indent * (depth + 1));
+      if (Array.isArray(v)) {
+        if (!v.length) return '[]';
+        const inline = '[' + v.map(x => fmt(x, 0)).join(', ') + ']';
+        if (!inline.includes('\n') && inline.length <= maxInline) return inline;
+        return '[\n' + v.map(x => inner + fmt(x, depth + 1)).join(',\n') + '\n' + pad + ']';
+      }
+      const keys = Object.keys(v);
+      if (!keys.length) return '{}';
+      const inline = '{' + keys.map(k => JSON.stringify(k) + ': ' + fmt(v[k], 0)).join(', ') + '}';
+      if (!inline.includes('\n') && inline.length <= maxInline) return inline;
+      return '{\n' + keys.map(k => inner + JSON.stringify(k) + ': ' + fmt(v[k], depth + 1)).join(',\n') + '\n' + pad + '}';
+    }
+    return fmt(json, 0);
+  }
+
+  /* ---------- CSV ---------- */
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+    if (!lines.length) return [];
+    const parseLine = line => {
+      const out = []; let cur = ''; let q = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q;
+        } else if (ch === ',' && !q) { out.push(cur); cur = ''; } else cur += ch;
+      }
+      out.push(cur); return out;
+    };
+    const headers = parseLine(lines[0]);
+    return lines.slice(1).map(l => {
+      const vals = parseLine(l), o = {};
+      headers.forEach((h, i) => o[h] = vals[i] ?? '');
+      return o;
+    });
+  }
+  function toCSV(data) {
+    if (!Array.isArray(data) || !data.length) return '';
+    const headers = Object.keys(data[0]);
+    const esc = v => {
+      const s = String(v ?? '');
+      return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const out = [headers.map(esc).join(',')];
+    for (const row of data) out.push(headers.map(h => esc(row[h])).join(','));
+    return out.join('\n');
+  }
+
+  /* ---------- clipboard / download ---------- */
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta);
+      ta.select(); document.execCommand('copy'); ta.remove();
+    }
+  }
+  function download(filename, content, mime = 'application/json') {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /* ---------- panel menu ---------- */
+  function buildPanelMenu() {
+    return `
+      <div class="document-details">
+        <span class="doc-title" id="doc-title">document.json</span>
+      </div>
+      <div class="space"></div>
+      <div class="buttons">
+        <button class="menu-button" data-action="new" title="New empty document">${I.file}</button>
+        <div class="dropdown-button">
+          <button class="menu-button">${I.folder} ${I.caret}</button>
+          <div class="dropdown-menu">
+            <button data-action="open-file">Open file</button>
+            <button data-action="open-url">Open from URL</button>
+            <div class="dropdown-menu-separator"></div>
+            <button data-action="import-csv">Import CSV</button>
+          </div>
+        </div>
+        <div class="dropdown-button">
+          <button class="menu-button">${I.save} ${I.caret}</button>
+          <div class="dropdown-menu">
+            <button data-action="save-disk">Save to disk</button>
+            <button data-action="save-url">Send to URL</button>
+            <div class="dropdown-menu-separator"></div>
+            <button data-action="export-csv">Export to CSV</button>
+          </div>
+        </div>
+        <div class="dropdown-button">
+          <button class="menu-button">${I.copy} ${I.caret}</button>
+          <div class="dropdown-menu">
+            <button data-action="copy-formatted">Copy formatted</button>
+            <button data-action="copy-smart">Copy smart formatted</button>
+            <button data-action="copy-compact">Copy compacted</button>
+            <button data-action="copy-escaped">Copy escaped</button>
+            <button data-action="copy-asis">Copy as-is</button>
+          </div>
+        </div>
+        <button class="menu-button" data-action="fullscreen" title="Fullscreen">${I.full}</button>
+      </div>
+    `;
+  }
+
+  async function handleAction(action) {
+    const data = getJSON();
+
+    switch (action) {
+      case 'new':
+if (doc.dirty && !(await uiConfirm(`"${doc.name}" has unsaved changes. Discard?`))) return;
+        editor.set({ json: {} });
+        doc.name = 'document.json';
+        markSaved();
+        break;
+
+      case 'open-file': {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json,.txt';
+  input.onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        editor.set({ json: JSON.parse(ev.target.result) });
+        doc.name = f.name;
+        markSaved();
+      } catch { uiAlert('Invalid JSON file.'); }
+    };
+    r.readAsText(f);
+  };
+  input.click();
+  break;
+}
+
+      case 'open-url': {
+  const url = await uiPrompt('Enter URL of JSON document:');
+  if (!url) return;
+  try {
+    const res = await fetch(url);
+    editor.set({ json: await res.json() });
+    doc.name = url.split('/').pop() || 'from-url.json';
+    markSaved();
+  } catch (err) { uiAlert('Failed: ' + err.message); }
+  break;
+}
+
+      case 'import-csv': {
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.csv,text/csv';
+  input.onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        editor.set({ json: parseCSV(ev.target.result) });
+        doc.name = f.name.replace(/\.csv$/i, '.json');
+        markSaved();
+      } catch (err) { uiAlert('CSV import failed: ' + err.message); }
+    };
+    r.readAsText(f);
+  };
+  input.click();
+  break;
+}
+
+
+ 
+      case 'save-disk':
+if (!data) { uiAlert('Cannot save: invalid JSON.'); return; }
+        download(doc.name, JSON.stringify(data, null, 2));
+        markSaved();
+        break;
+
+      case 'save-url': {
+  if (!data) { uiAlert('Cannot share: invalid JSON.'); return; }
+        const encoded = encodeURIComponent(JSON.stringify(data));
+        document.getElementById('share-url').value =
+          `${location.origin}${location.pathname}#doc=${encoded}`;
+        document.getElementById('modal-share').classList.add('active');
+        markSaved();
+        break;
+      }
+
+      case 'export-csv': {
+  if (!data) { uiAlert('Cannot export: invalid JSON.'); return; }
+  if (!Array.isArray(data)) { uiAlert('CSV export requires the root to be an array of objects.'); return; }
+        download(doc.name.replace(/\.json$/i, '.csv'), toCSV(data), 'text/csv');
+        break;
+      }
+
+
+
+      case 'copy-formatted':
+if (!data) { uiAlert('Cannot copy: invalid JSON.'); return; }
+        await copyText(JSON.stringify(data, null, 2));
+        break;
+
+      case 'copy-smart':
+        if (!data) { alert('Cannot copy: invalid JSON.'); return; }
+        await copyText(smartFormat(data));
+        break;
+
+      case 'copy-compact':
+        if (!data) { alert('Cannot copy: invalid JSON.'); return; }
+        await copyText(JSON.stringify(data));
+        break;
+
+      case 'copy-escaped': {
+        if (!data) { alert('Cannot copy: invalid JSON.'); return; }
+        await copyText(JSON.stringify(data).replace(/\\/g, '\\\\').replace(/"/g, '\\"'));
+        break;
+      }
+
+      case 'copy-asis':
+        await copyText(getRaw());
+        break;
+
+     case 'fullscreen': {
+  const panel = document.getElementById('panel-main');
+  const isFull = document.fullscreenElement || document.webkitFullscreenElement;
+  
+  if (!isFull) {
+    const req = panel.requestFullscreen || panel.webkitRequestFullscreen || panel.msRequestFullscreen;
+    if (req) {
+      const r = req.call(panel);
+      if (r && r.catch) r.catch(() => {});
+    } else {
+  uiAlert('Fullscreen is not supported in this browser.');
+}
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+    if (exit) exit.call(document);
+  }
+  
+  break;
+}
+      
+    }
+  }
+
+  /* ---------- dropdown + action delegation ---------- */
+  document.addEventListener('click', e => {
+    document.querySelectorAll('.dropdown-button.open').forEach(d => {
+      if (!d.contains(e.target)) d.classList.remove('open');
+    });
+    const trigger = e.target.closest('.dropdown-button > .menu-button');
+    if (trigger) {
+      e.preventDefault();
+      const parent = trigger.parentElement;
+      const wasOpen = parent.classList.contains('open');
+      document.querySelectorAll('.dropdown-button.open').forEach(d => d.classList.remove('open'));
+      if (!wasOpen) parent.classList.add('open');
+    }
+    const actionBtn = e.target.closest('[data-action]');
+    if (actionBtn) {
+      e.preventDefault();
+      document.querySelectorAll('.dropdown-button.open').forEach(d => d.classList.remove('open'));
+      handleAction(actionBtn.dataset.action);
+    }
+  });
+
+  /* ---------- init ---------- */
+window.addEventListener('DOMContentLoaded', () => {
+    // Restore saved theme BEFORE creating the editor
+    let saved = 'dark';
+    try { saved = localStorage.getItem('json-editor-theme') || 'dark'; } catch {}
+    currentTheme = saved === 'light' ? 'light' : 'dark';
+
+    document.getElementById('panel-menu').innerHTML = buildPanelMenu();
+
+    editor = createJSONEditor({
+      target: document.getElementById('editor-main'),
+      props: {
+        content: { json: [
+  { id: 1, name: "Alice",   role: "admin",  active: true,  tags: ["x", "y"] },
+  { id: 2, name: "Bob",     role: "editor", active: false, tags: ["z"] },
+  { id: 3, name: "Charlie", role: "viewer", active: true,  tags: [] }
+] },
+        mode: 'tree',
+        mainMenuBar: true,
+        navigationBar: false,
+        statusBar: true,
+        askToFormat: false,
+        onChange: () => { checkDirty(); updateStatus(); },
+        onError: err => console.error('JSONEditor:', err),
+      },
+    });
+
+    // Apply theme AFTER the editor container exists
+    applyTheme(currentTheme);
+    
+
+const FOCUS_ICONS = {
+  expand: `<svg viewBox="0 0 512 512" width="14" height="14"><path fill="currentColor" d="M344 0H488c13.3 0 24 10.7 24 24V168c0 9.7-5.8 18.5-14.8 22.2s-19.3 1.7-26.2-5.2l-39-39-87 87c-9.4 9.4-24.6 9.4-33.9 0l-32-32c-9.4-9.4-9.4-24.6 0-33.9l87-87-39-39c-6.9-6.9-8.9-17.2-5.2-26.2S334.3 0 344 0zM168 512H24c-13.3 0-24-10.7-24-24V344c0-9.7 5.8-18.5 14.8-22.2s19.3-1.7 26.2 5.2l39 39 87-87c9.4-9.4 24.6-9.4 33.9 0l32 32c9.4 9.4 9.4 24.6 0 33.9l-87 87 39 39c6.9 6.9 8.9 17.2 5.2 26.2S177.7 512 168 512z"/></svg>`,
+  collapse: `<svg viewBox="0 0 512 512" width="14" height="14"><path fill="currentColor" d="M502.6 54.6l-39 39 87 87c9.4 9.4 9.4 24.6 0 33.9l-32 32c-9.4 9.4-24.6 9.4-33.9 0l-87-87-39 39c-6.9 6.9-17.2 8.9-26.2 5.2S320 201.7 320 192V48c0-13.3 10.7-24 24-24H488c9.7 0 18.5 5.8 22.2 14.8s1.7 19.3-5.2 26.2zM32 344c0-9.7 5.8-18.5 14.8-22.2s19.3-1.7 26.2 5.2l39 39 87-87c9.4-9.4 24.6-9.4 33.9 0l32 32c9.4 9.4 9.4 24.6 0 33.9l-87 87 39 39c6.9 6.9 8.9 17.2 5.2 26.2S209.7 512 200 512H56c-13.3 0-24-10.7-24-24V344z"/></svg>`
+};
+function setFocusMode(on) {
+  document.body.classList.toggle('focus-mode', on);
+  const btn = document.getElementById('btn-focus-mode');
+  if (btn) {
+    btn.innerHTML = on ? FOCUS_ICONS.collapse : FOCUS_ICONS.expand;
+    btn.title = on ? 'Exit focus mode' : 'Enter focus mode';
+  }
+}
+
+// Append the focus-mode toggle
+const focusBtn = document.createElement('button');
+focusBtn.type = 'button';
+focusBtn.className = 'menu-button';
+focusBtn.id = 'btn-focus-mode';
+focusBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  setFocusMode(!document.body.classList.contains('focus-mode'));
+});
+document.querySelector('.panel-menu .buttons').appendChild(focusBtn);
+
+// Initialize to the current (false) state so the icon is correct on load
+setFocusMode(document.body.classList.contains('focus-mode'));
+
+    markSaved();
+    refreshTitle();
+
+const isFs = document.fullscreenElement || document.webkitFullscreenElement;
+console.log(!isFs);
+document.querySelector('button.menu-button[data-action="fullscreen"]').style.display = 'none';
+
+    
+});
+
+  /* ---------- toolbar actions ---------- */
+  document.getElementById('btn-repair').addEventListener('click', () => {
+  try {
+    const fixed = jsonrepair(getRaw());
+    editor.set({ json: JSON.parse(fixed) });
+    markSaved();
+  } catch (e) { uiAlert('Repair failed: ' + e.message); }
+});
+
+  document.getElementById('btn-validate').addEventListener('click', () =>
+    document.getElementById('modal-validate').classList.add('active'));
+    
+  document.getElementById('btn-validate-close').addEventListener('click', () =>
+    document.getElementById('modal-validate').classList.remove('active'));
+  document.getElementById('btn-validate-run').addEventListener('click', () => {
+    const st = document.getElementById('schema-input').value.trim();
+    const res = document.getElementById('validation-result');
+    if (!st) { res.textContent = 'Paste a schema first.'; return; }
+    try {
+      const schema = JSON.parse(st);
+      const data = getJSON();
+      if (!data) { res.textContent = 'Document is not valid JSON.'; return; }
+      const ajv = new Ajv({ allErrors: true, strict: false });
+      const validate = ajv.compile(schema);
+      res.textContent = validate(data)
+        ? '✅ Valid: document matches the schema.'
+        : '❌ Invalid:\n' + ajv.errorsText(validate.errors, { separator: '\n' });
+    } catch (e) { res.textContent = 'Error: ' + e.message; }
+  });
+
+  document.getElementById('btn-transform').addEventListener('click', () =>
+    document.getElementById('modal-transform').classList.add('active'));
+    
+  document.getElementById('btn-transform-close').addEventListener('click', () =>
+    document.getElementById('modal-transform').classList.remove('active'));
+  document.getElementById('btn-transform-run').addEventListener('click', () => {
+    const lang = document.getElementById('transform-lang').value;
+    const q = document.getElementById('transform-query').value.trim();
+    const res = document.getElementById('transform-result');
+    const data = getJSON();
+    if (!data) { res.textContent = 'Document is not valid JSON.'; return; }
+    try {
+      let out;
+      if (lang === 'jsonpath')      out = JSONPath({ path: q, json: data, wrap: false });
+      else if (lang === 'jmespath') out = jmespath.search(data, q);
+      else                          out = new Function('data', `return (${q});`)(data);
+      res.textContent = JSON.stringify(out, null, 2);
+    } catch (e) { res.textContent = 'Error: ' + e.message; }
+  });
+  document.getElementById('btn-transform-apply').addEventListener('click', () => {
+  try {
+    const j = JSON.parse(document.getElementById('transform-result').textContent);
+    editor.set({ json: j });
+    markSaved();
+    document.getElementById('modal-transform').classList.remove('active');
+  } catch { uiAlert('Result is not valid JSON.'); }
+});
+
+  document.getElementById('btn-share').addEventListener('click', () => {
+  const data = getJSON();
+  if (!data) { uiAlert('Cannot share: invalid JSON.'); return; }
+  const encoded = encodeURIComponent(JSON.stringify(data));
+  document.getElementById('share-url').value =
+    `${location.origin}${location.pathname}#doc=${encoded}`;
+  document.getElementById('modal-share').classList.add('active');
+});
+
+document.getElementById('btn-share-copy').addEventListener('click', () => {
+  const i = document.getElementById('share-url'); i.select(); document.execCommand('copy');
+  uiAlert('Copied!');
+});
+ 
+  
+  document.getElementById('btn-share-close').addEventListener('click', () =>
+    document.getElementById('modal-share').classList.remove('active'));
+
+  document.getElementById('btn-clear').addEventListener('click', async () => {
+  if (!(await uiConfirm('Clear the document?'))) return;
+  editor.set({ json: {} });
+  markSaved();
+});
+  /* ---------- load from hash ---------- */
+  window.addEventListener('load', () => {
+    const h = location.hash;
+    if (h.startsWith('#doc=')) {
+      try {
+        editor.set({ json: JSON.parse(decodeURIComponent(h.slice(5))) });
+        markSaved();
+      } catch {}
+    }
+  });
+</script>
+</body>
+</html>
