@@ -1,0 +1,11 @@
+{
+  "name": "json-editor",
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": "26.x"
+  },
+  "dependencies": {
+    "@tursodatabase/serverless": "latest"
+  }
+}
