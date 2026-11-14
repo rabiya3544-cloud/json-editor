@@ -1,9 +1,9 @@
-// api/server.js — POST { url, date?, likes? } → { ok, filename, url, bytes }
-// Self-contained. No dependency on tokdl / tokupload.
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+// api/backblaze.js
+// ESM — matches "type": "module" in package.json
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
-const B2_ENDPOINT = process.env.B2_ENDPOINT;   // https://s3.us-west-004.backblazeb2.com
-const B2_REGION   = process.env.B2_REGION;     // us-west-004
+const B2_ENDPOINT = process.env.B2_ENDPOINT;
+const B2_REGION   = process.env.B2_REGION;
 const B2_BUCKET   = process.env.B2_BUCKET;
 const B2_KEY_ID   = process.env.B2_KEY_ID;
 const B2_APP_KEY  = process.env.B2_APP_KEY;
@@ -11,16 +11,19 @@ const B2_APP_KEY  = process.env.B2_APP_KEY;
 const s3 = new S3Client({
   endpoint: B2_ENDPOINT,
   region: B2_REGION,
-  credentials: { accessKeyId: B2_KEY_ID, secretAccessKey: B2_APP_KEY },
+  credentials: {
+    accessKeyId: B2_KEY_ID,
+    secretAccessKey: B2_APP_KEY,
+  },
 });
 
 const ALLOWED_HOSTS = /(^|\.)(tiktokv|tiktokcdn|byteoversea|ibytedtos|muscdn|tos-)\.com$/i;
 const MAX_BYTES = 300 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 90_000;
 
-const config = { maxDuration: 60, memory: 1024 };
+export const config = { maxDuration: 60, memory: 1024 };
 
-async function handler(req, res) {
+export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -51,7 +54,6 @@ async function handler(req, res) {
     return res.status(400).json({ error: 'host not allowed', host: parsed.hostname });
   }
 
-  // filename
   let dateStr;
   if (date) {
     dateStr = String(date);
@@ -63,7 +65,6 @@ async function handler(req, res) {
   }
   const filename = `jafernegery${dateStr}.mp4`;
 
-  // fetch upstream (streamed)
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), FETCH_TIMEOUT_MS);
 
@@ -110,13 +111,13 @@ async function handler(req, res) {
     return res.status(415).json({ error: 'unexpected content-type', contentType });
   }
 
-  // stream straight to B2
   try {
     await s3.send(new PutObjectCommand({
       Bucket: B2_BUCKET,
       Key: filename,
       Body: upstream.body,
       ContentType: 'video/mp4',
+      ContentLength: contentLength || undefined,
     }));
     clearTimeout(timer);
 
@@ -132,9 +133,10 @@ async function handler(req, res) {
     });
   } catch (e) {
     clearTimeout(timer);
-    return res.status(500).json({ error: 'storage failed', detail: e.message });
+    return res.status(500).json({
+      error: 'storage failed',
+      detail: e.message,
+      name: e.name,
+    });
   }
 }
-
-module.exports = handler;
-module.exports.config = config;
