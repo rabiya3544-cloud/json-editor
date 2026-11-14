@@ -1,6 +1,6 @@
 // api/backblaze.js
-// ESM — matches "type": "module" in package.json
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage'; // 1. Import Upload
 
 const B2_ENDPOINT = process.env.B2_ENDPOINT;
 const B2_REGION   = process.env.B2_REGION;
@@ -112,13 +112,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    await s3.send(new PutObjectCommand({
-      Bucket: B2_BUCKET,
-      Key: filename,
-      Body: upstream.body,
-      ContentType: 'video/mp4',
-      ContentLength: contentLength || undefined,
-    }));
+    // 2. Replace PutObjectCommand with the Upload helper
+    const upload = new Upload({
+      client: s3,
+      params: {
+        Bucket: B2_BUCKET,
+        Key: filename,
+        Body: upstream.body,          // The flowing ReadableStream
+        ContentType: 'video/mp4',
+        ContentLength: contentLength || undefined,
+      },
+      // Optional: Configure part size for very large files
+      // partSize: 10 * 1024 * 1024, 
+      // queueSize: 4,
+    });
+
+    await upload.done(); // This handles the stream hashing and upload
     clearTimeout(timer);
 
     const publicUrl = `https://${B2_BUCKET}.s3.${B2_REGION}.backblazeb2.com/${encodeURIComponent(filename)}`;
