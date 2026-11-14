@@ -11,10 +11,6 @@ export { client };
 /*  WRITE                                                              */
 /* ------------------------------------------------------------------ */
 
-/**
- * Inserts a single TikTok post.
- * @param {Object} post
- */
 export async function insertPosts(post) {
   const sql = `
     INSERT INTO tiktok_posts (
@@ -49,10 +45,6 @@ export async function insertPosts(post) {
   return await client.execute(sql, args);
 }
 
-/**
- * Inserts multiple TikTok posts in a single transactional batch.
- * @param {Object[]} posts
- */
 export async function insertBulkPosts(posts) {
   const sql = `
     INSERT INTO tiktok_posts (
@@ -91,18 +83,9 @@ export async function insertBulkPosts(posts) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  READ — summary view                                               */
+/*  READ — summary view                                                */
 /* ------------------------------------------------------------------ */
 
-/**
- * Returns rows from the tiktok_posts_summary view, ordered by Likes DESC.
- * Supports optional pagination.
- *
- * @param {Object}  [opts]
- * @param {number}  [opts.limit=50]
- * @param {number}  [opts.offset=0]
- * @returns {Promise<{Date:string, Likes:number, CoverImage:string}[]>}
- */
 export async function getPostsSummary({ limit = 50, offset = 0 } = {}) {
   const sql = `
     SELECT "Date", "Likes", "CoverImage"
@@ -114,10 +97,6 @@ export async function getPostsSummary({ limit = 50, offset = 0 } = {}) {
   return result.rows;
 }
 
-/**
- * Returns a single summary row filtered by exact Date.
- * @param {string} date
- */
 export async function getSummaryByDate(date) {
   const sql = `
     SELECT "Date", "Likes", "CoverImage"
@@ -129,10 +108,6 @@ export async function getSummaryByDate(date) {
   return result.rows[0] ?? null;
 }
 
-/**
- * Returns the N most-liked posts from the view (shortcut).
- * @param {number} [n=10]
- */
 export async function getTopLikedPosts(n = 10) {
   const sql = `
     SELECT "Date", "Likes", "CoverImage"
@@ -148,10 +123,6 @@ export async function getTopLikedPosts(n = 10) {
 /*  COUNT                                                              */
 /* ------------------------------------------------------------------ */
 
-/**
- * Total number of rows in tiktok_posts.
- * @returns {Promise<number>}
- */
 export async function countPosts() {
   const result = await client.execute(
     `SELECT COUNT(*) AS total FROM tiktok_posts`
@@ -159,11 +130,6 @@ export async function countPosts() {
   return Number(result.rows[0].total ?? 0);
 }
 
-/**
- * Total rows in the summary view (identical count today, but kept
- * separate so it survives future view changes).
- * @returns {Promise<number>}
- */
 export async function countSummaryRows() {
   const result = await client.execute(
     `SELECT COUNT(*) AS total FROM tiktok_posts_summary`
@@ -171,15 +137,101 @@ export async function countSummaryRows() {
   return Number(result.rows[0].total ?? 0);
 }
 
-/**
- * Count of posts whose Likes >= a threshold.
- * @param {number} minLikes
- * @returns {Promise<number>}
- */
 export async function countPostsWithMinLikes(minLikes = 0) {
   const result = await client.execute({
     sql: `SELECT COUNT(*) AS total FROM tiktok_posts WHERE "Likes" >= ?`,
     args: [minLikes],
   });
   return Number(result.rows[0].total ?? 0);
+}
+
+/* ------------------------------------------------------------------ */
+/*  HTTP HANDLER — RPC over one endpoint                               */
+/* ------------------------------------------------------------------ */
+
+export default async function handler(req, res) {
+  try {
+    if (req.method === 'POST') {
+      const { action, payload = {} } = req.body ?? {};
+
+      switch (action) {
+        case 'insertPost': {
+          if (!payload.post || typeof payload.post !== 'object') {
+            return res.status(400).json({ error: 'payload.post is required' });
+          }
+          const result = await insertPosts(payload.post);
+          return res.status(200).json({ result });
+        }
+
+        case 'insertBulkPosts': {
+          if (!Array.isArray(payload.posts)) {
+            return res.status(400).json({ error: 'payload.posts must be an array' });
+          }
+          const result = await insertBulkPosts(payload.posts);
+          return res.status(200).json({ result, inserted: payload.posts.length });
+        }
+
+        default:
+          return res.status(400).json({ error: `Unknown POST action: ${action}` });
+      }
+    }
+
+    if (req.method === 'GET') {
+      const action = req.query.action;
+
+      switch (action) {
+        case 'getPostsSummary': {
+          const limit  = clamp(Number(req.query.limit  ?? 50), 1, 500);
+          const offset = Math.max(Number(req.query.offset ?? 0), 0);
+          const result = await getPostsSummary({ limit, offset });
+          return res.status(200).json({ result });
+        }
+
+        case 'getSummaryByDate': {
+          const date = req.query.date;
+          if (!date) {
+            return res.status(400).json({ error: 'query.date is required' });
+          }
+          const result = await getSummaryByDate(date);
+          return res.status(200).json({ result });
+        }
+
+        case 'getTopLikedPosts': {
+          const n = clamp(Number(req.query.n ?? 10), 1, 500);
+          const result = await getTopLikedPosts(n);
+          return res.status(200).json({ result });
+        }
+
+        case 'countPosts': {
+          const result = await countPosts();
+          return res.status(200).json({ result });
+        }
+
+        case 'countSummaryRows': {
+          const result = await countSummaryRows();
+          return res.status(200).json({ result });
+        }
+
+        case 'countPostsWithMinLikes': {
+          const min = Number(req.query.minLikes ?? 0);
+          const result = await countPostsWithMinLikes(min);
+          return res.status(200).json({ result });
+        }
+
+        default:
+          return res.status(400).json({ error: `Unknown GET action: ${action}` });
+      }
+    }
+
+    res.setHeader('Allow', 'GET, POST');
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (err) {
+    console.error('api/turos error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
+
+function clamp(n, min, max) {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(Math.max(n, min), max);
 }
