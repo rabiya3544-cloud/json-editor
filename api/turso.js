@@ -7,6 +7,15 @@ const client = createClient({
 
 export { client };
 
+function rowsToObjects(result) {
+  const cols = result.columns || [];
+  return (result.rows || []).map(row => {
+    const obj = {};
+    cols.forEach((c, i) => { obj[c] = row[i]; });
+    return obj;
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  WRITE                                                              */
 /* ------------------------------------------------------------------ */
@@ -88,24 +97,25 @@ export async function insertBulkPosts(posts) {
 
 export async function getPostsSummary({ limit = 50, offset = 0 } = {}) {
   const sql = `
-    SELECT "Date", "Likes", "CoverImage"
+    SELECT "Date", "Likes", "CoverImage", "Link"
     FROM tiktok_posts_summary
     ORDER BY "Likes" DESC
     LIMIT ? OFFSET ?
   `;
   const result = await client.execute({ sql, args: [limit, offset] });
-  return result.rows;
+  return rowsToObjects(result);
 }
 
 export async function getSummaryByDate(date) {
   const sql = `
-    SELECT "Date", "Likes", "CoverImage"
+    SELECT "Date", "Likes", "CoverImage", "Link"
     FROM tiktok_posts_summary
     WHERE "Date" = ?
     LIMIT 1
   `;
   const result = await client.execute({ sql, args: [date] });
-  return result.rows[0] ?? null;
+  const rows = rowsToObjects(result);
+  return rows[0] ?? null;
 }
 
 export async function getTopLikedPosts(n = 10) {
@@ -116,7 +126,7 @@ export async function getTopLikedPosts(n = 10) {
     LIMIT ?
   `;
   const result = await client.execute({ sql, args: [n] });
-  return result.rows;
+  return rowsToObjects(result);
 }
 
 /* ------------------------------------------------------------------ */
