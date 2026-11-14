@@ -28,7 +28,7 @@ export async function insertPosts(post) {
   const args = [
     post.Date,
     post.Link,
-    post.Likes ?? 0,
+    post.Likes != null ? Number(String(post.Likes).replace(/,/g, '')) : 0,
     post.WhoCanView,
     post.AllowComments ? 1 : 0,
     post.AllowStitches ? 1 : 0,
@@ -68,7 +68,7 @@ export async function insertBulkPosts(posts) {
     args: [
       post.Date,
       post.Link,
-      post.Likes ?? 0,
+      post.Likes != null ? Number(String(post.Likes).replace(/,/g, '')) : 0,
       post.WhoCanView,
       post.AllowComments ? 1 : 0,
       post.AllowStitches ? 1 : 0,
