@@ -160,12 +160,12 @@ export default async function handler(req, res) {
 
       switch (action) {
         case 'insertPost': {
-          if (!payload.post || typeof payload.post !== 'object') {
-            return res.status(400).json({ error: 'payload.post is required' });
-          }
-          const result = await insertPosts(payload.post);
-          return res.status(200).json({ result });
-        }
+  if (!payload.post || typeof payload.post !== 'object') {
+    return res.status(400).json({ error: 'payload.post is required' });
+  }
+  const result = await insertPosts(payload.post);
+  return res.status(200).json({ inserted: 1, lastInsertRowid: result.lastInsertRowid ?? null });
+}
 
         case 'insertBulkPosts': {
           if (!Array.isArray(payload.posts)) {
