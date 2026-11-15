@@ -244,7 +244,17 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
+/* ------------------------------------------------------------------ */
+/*  DELETE — clear all data                                            */
+/* ------------------------------------------------------------------ */
 
+export async function clearAllPosts() {
+  const result = await client.execute("DELETE FROM posts");
+  return {
+    deleted: result.rowsAffected ?? 0,
+    success: true,
+  };
+}
 function clamp(n, min, max) {
   if (!Number.isFinite(n)) return min;
   return Math.min(Math.max(n, min), max);
