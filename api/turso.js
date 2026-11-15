@@ -225,7 +225,11 @@ export default async function handler(req, res) {
           const result = await countSummaryRows();
           return res.status(200).json({ result });
         }
-
+/* ---------------- DELETE --------------- */
+      case "clearAllPosts": {
+        const result = await clearAllPosts();
+        return res.status(200).json({ ok: true, ...result });
+      }
         case 'countPostsWithMinLikes': {
           const min = Number(req.query.minLikes ?? 0);
           const result = await countPostsWithMinLikes(min);
