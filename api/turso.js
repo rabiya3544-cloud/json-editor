@@ -155,6 +155,17 @@ export async function countPostsWithMinLikes(minLikes = 0) {
   return Number(result.rows[0].total ?? 0);
 }
 
+export async function clearAllPosts() {
+  const result = await client.execute("DELETE FROM tiktok_posts");
+  return {
+    deleted: result.rowsAffected ?? 0,
+    success: true,
+  };
+}
+function clamp(n, min, max) {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(Math.max(n, min), max);
+}
 /* ------------------------------------------------------------------ */
 /*  HTTP HANDLER — RPC over one endpoint                               */
 /* ------------------------------------------------------------------ */
@@ -251,15 +262,3 @@ export default async function handler(req, res) {
 /* ------------------------------------------------------------------ */
 /*  DELETE — clear all data                                            */
 /* ------------------------------------------------------------------ */
-
-export async function clearAllPosts() {
-  const result = await client.execute("DELETE FROM tiktok_posts");
-  return {
-    deleted: result.rowsAffected ?? 0,
-    success: true,
-  };
-}
-function clamp(n, min, max) {
-  if (!Number.isFinite(n)) return min;
-  return Math.min(Math.max(n, min), max);
-}
