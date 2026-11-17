@@ -195,7 +195,7 @@ export default async function handler(req, res) {
 
       switch (action) {
         case 'getPostsSummary': {
-          const limit  = clamp(Number(req.query.limit  ?? 50), 1, 500);
+          const limit  = clamp(Number(req.query.limit  ?? 50), 1, 3000);
           const offset = Math.max(Number(req.query.offset ?? 0), 0);
           const result = await getPostsSummary({ limit, offset });
           return res.status(200).json({ result });
