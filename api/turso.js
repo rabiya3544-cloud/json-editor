@@ -253,7 +253,7 @@ export default async function handler(req, res) {
 /* ------------------------------------------------------------------ */
 
 export async function clearAllPosts() {
-  const result = await client.execute("DELETE FROM posts");
+  const result = await client.execute("DELETE FROM tiktok_posts");
   return {
     deleted: result.rowsAffected ?? 0,
     success: true,
