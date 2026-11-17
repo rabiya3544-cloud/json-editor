@@ -222,7 +222,7 @@ export default async function handler(req, res) {
         }
 
         case 'getTopLikedPosts': {
-          const n = clamp(Number(req.query.n ?? 10), 1, 500);
+          const n = clamp(Number(req.query.n ?? 10), 1, 3000);
           const result = await getTopLikedPosts(n);
           return res.status(200).json({ result });
         }
