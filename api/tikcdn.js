@@ -187,7 +187,7 @@ export async function countPostsWithMinLikes(minLikes = 0) {
 
 export async function getFailedForB2(n = 100) {
   const sql = `
-    SELECT "Date", "Likes", "CoverImage", "Link", "Status"
+    SELECT "Date", "Likes", "CoverImage", "Link", "Status", "blob_cover_pathname", "blob_cover_url"
     FROM failed_for_b2
     ORDER BY "Likes" DESC
     LIMIT ?
