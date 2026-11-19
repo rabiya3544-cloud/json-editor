@@ -336,6 +336,16 @@ export default async function handler(req, res) {
   const result = await updateBlobCoverByDates(dates, blobCoverPathname, blobCoverUrl);
   return res.status(200).json(result);
 }
+
+          case 'debugViewCols': {
+  const r = await client.execute(`PRAGMA table_info(tiktok_posts_summary)`);
+  return res.status(200).json({
+    columns: r.rows.map(row => row[1]),
+    viewSql: (await client.execute(
+      `SELECT sql FROM sqlite_master WHERE type='view' AND name='tiktok_posts_summary'`
+    )).rows[0]?.[0] || null,
+  });
+}
         case 'countPosts': {
           const result = await countPosts();
           return res.status(200).json({ result });
