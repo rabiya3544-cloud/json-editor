@@ -195,7 +195,42 @@ export async function getFailedForB2(n = 100) {
   const result = await client.execute({ sql, args: [n] });
   return rowsToObjects(result);
 }
+/* ------------------------------------------------------------------ */
+/*  WRITE — record blob cover metadata (by Date)                       */
+/* ------------------------------------------------------------------ */
 
+export async function updateBlobCoverByDates(dates, blobCoverPathname, blobCoverUrl) {
+  if (!Array.isArray(dates) || dates.length === 0) {
+    return { updated: 0, success: true };
+  }
+  if (typeof blobCoverPathname !== 'string' || blobCoverPathname.length === 0) {
+    throw new Error('blobCoverPathname must be a non-empty string');
+  }
+  if (typeof blobCoverUrl !== 'string' || blobCoverUrl.length === 0) {
+    throw new Error('blobCoverUrl must be a non-empty string');
+  }
+
+  // Turso/SQLite param cap ~999; chunk to be safe.
+  const CHUNK = 500;
+  let total = 0;
+
+  for (let i = 0; i < dates.length; i += CHUNK) {
+    const slice = dates.slice(i, i + CHUNK);
+    const placeholders = slice.map(() => '?').join(',');
+    const sql = `
+      UPDATE tiktok_posts
+      SET "blob_cover_pathname" = ?, "blob_cover_url" = ?
+      WHERE "Date" IN (${placeholders})
+    `;
+    const result = await client.execute({
+      sql,
+      args: [blobCoverPathname, blobCoverUrl, ...slice],
+    });
+    total += result.rowsAffected ?? 0;
+  }
+
+  return { updated: total, success: true };
+}
 export async function clearAllPosts() {
   const result = await client.execute("DELETE FROM tiktok_posts");
   return {
@@ -286,6 +321,20 @@ export default async function handler(req, res) {
   const n = clamp(Number(req.query.n ?? 100), 1, 3000);
   const result = await getFailedForB2(n);
   return res.status(200).json({ result });
+}
+          case 'updateBlobCoverByDates': {
+  const { dates, blobCoverPathname, blobCoverUrl } = payload;
+  if (!Array.isArray(dates) || dates.length === 0) {
+    return res.status(400).json({ error: 'payload.dates must be a non-empty array' });
+  }
+  if (typeof blobCoverPathname !== 'string' || blobCoverPathname.length === 0) {
+    return res.status(400).json({ error: 'payload.blobCoverPathname must be a non-empty string' });
+  }
+  if (typeof blobCoverUrl !== 'string' || blobCoverUrl.length === 0) {
+    return res.status(400).json({ error: 'payload.blobCoverUrl must be a non-empty string' });
+  }
+  const result = await updateBlobCoverByDates(dates, blobCoverPathname, blobCoverUrl);
+  return res.status(200).json(result);
 }
         case 'countPosts': {
           const result = await countPosts();
