@@ -1,4 +1,5 @@
 // api/upload-cover-to-blob.js
+// Upload ONLY CoverImage to Vercel Blob. No video fetch, no video download.
 import { put } from '@vercel/blob';
 
 const ALLOWED_HOSTS = /(^|\.)(tiktokv|tiktokcdn|byteoversea|ibytedtos|muscdn|tos-)\.com$/i;
@@ -22,6 +23,13 @@ function pickExt(url, contentType) {
 }
 
 export default async function handler(req, res) {
+  // ---- CORS (this project has no global middleware) ----
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (req.method === 'OPTIONS') return res.status(204).end();
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ success: false, error: 'Method not allowed' });
@@ -44,8 +52,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: `host not allowed: ${parsed.hostname}` });
     }
 
-    // ── THIS IS THE MISSING "body" ───────────────────────────
-    // Fetch the image bytes from the TikTok CDN.
+    // ---- Fetch the image bytes from the TikTok CDN ----
     const upstream = await fetch(coverImg, {
       headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'image/*' },
       redirect: 'follow',
@@ -63,9 +70,7 @@ export default async function handler(req, res) {
       return res.status(415).json({ success: false, error: `not an image: ${contentType}` });
     }
 
-    const body = upstream.body;   // ← web ReadableStream, fed straight to put()
-    // ─────────────────────────────────────────────────────────
-
+    const body = upstream.body;   // web ReadableStream → put()
     const dateStr = sanitizeDate(date) || Date.now().toString();
     const ext = pickExt(coverImg, contentType);
     const pathname = `cover_${dateStr}.${ext}`;
@@ -85,8 +90,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      pathname: blob.pathname,   // 'cover_2024-01-15T10_30_00Z.jpg'
-      url: blob.url,             // public URL
+      pathname: blob.pathname,
+      url: blob.url,
       contentType,
       size: blob.size ?? null,
     });
