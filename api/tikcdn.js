@@ -185,6 +185,17 @@ export async function countPostsWithMinLikes(minLikes = 0) {
   return Number(result.rows[0].total ?? 0);
 }
 
+export async function getFailedForB2(n = 100) {
+  const sql = `
+    SELECT "Date", "Likes", "CoverImage", "Link", "Status"
+    FROM failed_for_b2
+    ORDER BY "Likes" DESC
+    LIMIT ?
+  `;
+  const result = await client.execute({ sql, args: [n] });
+  return rowsToObjects(result);
+}
+
 export async function clearAllPosts() {
   const result = await client.execute("DELETE FROM tiktok_posts");
   return {
