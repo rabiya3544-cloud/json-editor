@@ -150,7 +150,7 @@ export async function getSummaryByDate(date) {
 
 export async function getTopLikedPosts(n = 10) {
   const sql = `
-    SELECT "Date", "Likes", "CoverImage", "Link", "Status"
+    SELECT "Date", "Likes", "CoverImage", "Link", "Status", "blob_cover_pathname", "blob_cover_url"
     FROM tiktok_posts_summary
     ORDER BY "Likes" DESC
     LIMIT ?
