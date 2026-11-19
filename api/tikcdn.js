@@ -282,6 +282,11 @@ export default async function handler(req, res) {
           return res.status(200).json({ result });
         }
 
+          case 'getFailedForB2': {
+  const n = clamp(Number(req.query.n ?? 100), 1, 3000);
+  const result = await getFailedForB2(n);
+  return res.status(200).json({ result });
+}
         case 'countPosts': {
           const result = await countPosts();
           return res.status(200).json({ result });
