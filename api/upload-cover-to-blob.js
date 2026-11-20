@@ -7,14 +7,14 @@
 //      (browser already downloaded the bytes — preferred, avoids CDN blocks)
 import { put } from '@vercel/blob';
 import formidable from 'formidable';
+import fs from 'node:fs/promises';
 
 const ALLOWED_HOSTS =
   /(^|\.)(tiktokv|tiktokcdn|byteoversea|ibytedtos|muscdn|tos-)\.com$/i;
 
 export const config = {
   api: {
-    bodyParser: false,          // we parse multipart ourselves
-    sizeLimit: '10mb',
+    bodyParser: false, // we parse both JSON and multipart ourselves
   },
 };
 
@@ -37,14 +37,21 @@ function pickExt(url, contentType) {
   return 'jpg';
 }
 
-function readJsonBody(req) {
-  // bodyParser is off, so read the raw stream ourselves
+function readJsonBody(req, maxBytes = 1 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let raw = '';
-    req.on('data', (c) => (raw += c));
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > maxBytes) {
+        req.destroy();
+        return reject(new Error('JSON body too large'));
+      }
+      raw += c;
+    });
     req.on('end', () => {
       try { resolve(raw ? JSON.parse(raw) : {}); }
-      catch (e) { reject(new Error('invalid JSON body')); }
+      catch { reject(new Error('invalid JSON body')); }
     });
     req.on('error', reject);
   });
@@ -55,25 +62,23 @@ function readMultipart(req) {
     const form = formidable({ maxFileSize: 10 * 1024 * 1024, multiples: false });
     form.parse(req, (err, fields, files) => {
       if (err) return reject(err);
-      // formidable v3 returns arrays; normalize
       const flatFields = {};
       for (const [k, v] of Object.entries(fields || {})) {
         flatFields[k] = Array.isArray(v) ? v[0] : v;
       }
-      const f = files && files.file
-        ? (Array.isArray(files.file) ? files.file[0] : files.file)
-        : null;
+      const raw = files && files.file;
+      const f = Array.isArray(raw) ? raw[0] : raw || null;
       resolve({ fields: flatFields, file: f });
     });
   });
 }
 
-async function uploadFromBuffer({ buffer, contentType, filename, date, likes, userId, sourceLink }) {
+async function putBlob({ body, contentType, date, likes, userId, sourceLink, extHint }) {
   const dateStr = sanitizeDate(date) || Date.now().toString();
-  const ext = pickExt(filename, contentType);
+  const ext = pickExt(extHint, contentType);
   const pathname = `cover_${dateStr}.${ext}`;
 
-  const blob = await put(pathname, buffer, {
+  const blob = await put(pathname, body, {
     access: 'public',
     token: process.env.BLOB_READ_WRITE_TOKEN,
     addRandomSuffix: false,
@@ -91,7 +96,7 @@ async function uploadFromBuffer({ buffer, contentType, filename, date, likes, us
     pathname: blob.pathname,
     url: blob.url,
     contentType,
-    size: blob.size ?? buffer.length,
+    size: blob.size ?? null,
   };
 }
 
@@ -121,29 +126,26 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'file field required' });
       }
 
-      // file.mimetype is set by formidable from the part's Content-Type
-      let contentType = file.mimetype || 'image/jpeg';
-      if (!/^image\//i.test(contentType)) {
-        return res.status(415).json({ success: false, error: `not an image: ${contentType}` });
+      try {
+        const contentType = file.mimetype || 'image/jpeg';
+        if (!/^image\//i.test(contentType)) {
+          return res.status(415).json({ success: false, error: `not an image: ${contentType}` });
+        }
+
+        const buffer = await fs.readFile(file.filepath);
+        const out = await putBlob({
+          body: buffer,
+          contentType,
+          date: fields.date,
+          likes: fields.likes,
+          userId: fields.userId,
+          sourceLink: fields.sourceLink,
+          extHint: file.originalFilename || '',
+        });
+        return res.status(200).json(out);
+      } finally {
+        fs.unlink(file.filepath).catch(() => {});
       }
-
-      // Read the temp file into a buffer
-      const fs = await import('node:fs/promises');
-      const buffer = await fs.readFile(file.filepath);
-
-      const out = await uploadFromBuffer({
-        buffer,
-        contentType,
-        filename: file.originalFilename || '',
-        date: fields.date,
-        likes: fields.likes,
-        userId: fields.userId,
-        sourceLink: fields.sourceLink,
-      });
-
-      // best-effort cleanup of formidable temp file
-      fs.unlink(file.filepath).catch(() => {});
-      return res.status(200).json(out);
     }
 
     // =========================================================
@@ -167,7 +169,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: `host not allowed: ${parsed.hostname}` });
       }
 
-      // 8s timeout so we return a readable error instead of a silent 504
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 8000);
 
@@ -185,11 +186,11 @@ export default async function handler(req, res) {
           signal: controller.signal,
         });
       } catch (e) {
-        clearTimeout(timer);
         const msg = e.name === 'AbortError' ? 'upstream timeout (8s)' : `upstream fetch: ${e.message}`;
         return res.status(504).json({ success: false, error: msg });
+      } finally {
+        clearTimeout(timer);
       }
-      clearTimeout(timer);
 
       if (!upstream.ok || !upstream.body) {
         return res.status(502).json({
@@ -203,31 +204,16 @@ export default async function handler(req, res) {
         return res.status(415).json({ success: false, error: `not an image: ${contentType}` });
       }
 
-      // Stream directly into put() — no full buffering needed
-      const dateStr = sanitizeDate(date) || Date.now().toString();
-      const ext = pickExt(coverImg, contentType);
-      const pathname = `cover_${dateStr}.${ext}`;
-
-      const blob = await put(pathname, upstream.body, {
-        access: 'public',
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-        addRandomSuffix: false,
+      const out = await putBlob({
+        body: upstream.body,
         contentType,
-        customMetadata: {
-          date: String(date || ''),
-          likes: String(likes ?? 0),
-          sourceLink: String(sourceLink || ''),
-          userId: String(userId || ''),
-        },
+        date,
+        likes,
+        userId,
+        sourceLink,
+        extHint: coverImg,
       });
-
-      return res.status(200).json({
-        success: true,
-        pathname: blob.pathname,
-        url: blob.url,
-        contentType,
-        size: blob.size ?? null,
-      });
+      return res.status(200).json(out);
     }
 
     return res.status(415).json({
