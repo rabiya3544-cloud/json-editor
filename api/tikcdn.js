@@ -286,6 +286,21 @@ export default async function handler(req, res) {
           return res.status(200).json(result);
         }
 
+          case 'updateBlobCoverByDates': {
+  const { dates, blobCoverPathname, blobCoverUrl } = payload;
+  if (!Array.isArray(dates) || dates.length === 0) {
+    return res.status(400).json({ error: 'payload.dates must be a non-empty array' });
+  }
+  if (typeof blobCoverPathname !== 'string' || blobCoverPathname.length === 0) {
+    return res.status(400).json({ error: 'payload.blobCoverPathname must be a non-empty string' });
+  }
+  if (typeof blobCoverUrl !== 'string' || blobCoverUrl.length === 0) {
+    return res.status(400).json({ error: 'payload.blobCoverUrl must be a non-empty string' });
+  }
+  const result = await updateBlobCoverByDates(dates, blobCoverPathname, blobCoverUrl);
+  return res.status(200).json(result);
+}
+
         default:
           return res.status(400).json({ error: `Unknown POST action: ${action}` });
       }
@@ -321,20 +336,6 @@ export default async function handler(req, res) {
   const n = clamp(Number(req.query.n ?? 100), 1, 3000);
   const result = await getFailedForB2(n);
   return res.status(200).json({ result });
-}
-          case 'updateBlobCoverByDates': {
-  const { dates, blobCoverPathname, blobCoverUrl } = payload;
-  if (!Array.isArray(dates) || dates.length === 0) {
-    return res.status(400).json({ error: 'payload.dates must be a non-empty array' });
-  }
-  if (typeof blobCoverPathname !== 'string' || blobCoverPathname.length === 0) {
-    return res.status(400).json({ error: 'payload.blobCoverPathname must be a non-empty string' });
-  }
-  if (typeof blobCoverUrl !== 'string' || blobCoverUrl.length === 0) {
-    return res.status(400).json({ error: 'payload.blobCoverUrl must be a non-empty string' });
-  }
-  const result = await updateBlobCoverByDates(dates, blobCoverPathname, blobCoverUrl);
-  return res.status(200).json(result);
 }
 
           case 'debugViewCols': {
