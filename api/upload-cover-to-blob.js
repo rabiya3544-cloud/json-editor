@@ -23,6 +23,15 @@ function sanitizeDate(date) {
   if (!date) return null;
   return String(date).replace(/[\\/:*?"<>|\s]/g, '_').slice(0, 40);
 }
+function sanitizeUserId(userId) {
+  if (!userId) return null;
+  // keep letters/digits/._- only, collapse the rest to _
+  return String(userId)
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 64) || null;
+}
 
 function pickExt(url, contentType) {
   const m = String(url || '').match(/\.(jpe?g|png|webp|gif|avif)(?:[?#]|$)/i);
