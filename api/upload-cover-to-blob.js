@@ -85,7 +85,10 @@ function readMultipart(req) {
 async function putBlob({ body, contentType, date, likes, userId, sourceLink, extHint }) {
   const dateStr = sanitizeDate(date) || Date.now().toString();
   const ext = pickExt(extHint, contentType);
-  const pathname = `cover_${dateStr}.${ext}`;
+
+  // sanitize userId so it can't escape the folder or contain weird chars
+  const userSeg = sanitizeUserId(userId) || 'unknown';
+  const pathname = `${userSeg}/cover_${dateStr}.${ext}`;
 
   const blob = await put(pathname, body, {
     access: 'public',
@@ -100,13 +103,7 @@ async function putBlob({ body, contentType, date, likes, userId, sourceLink, ext
     },
   });
 
-  return {
-    success: true,
-    pathname: blob.pathname,
-    url: blob.url,
-    contentType,
-    size: blob.size ?? null,
-  };
+  return { success: true, pathname: blob.pathname, url: blob.url, contentType, size: blob.size ?? null };
 }
 
 // ---------- handler ----------
